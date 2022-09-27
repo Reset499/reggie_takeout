@@ -14,10 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @RestController
@@ -33,6 +35,9 @@ public class DishController {
 
     @Autowired
     private DishFlavorService dishFlavorService;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     //1.菜品分页功能
     @GetMapping("/page")
@@ -91,31 +96,42 @@ public class DishController {
 
     //5.修改,批量修改停售起售状态
     @PostMapping("/status/{status}")
-    public Result<Object> status(@PathVariable Integer status,Long[] ids){
-        return dishService.changeStatus(status,ids);
+    public Result<Object> status(@PathVariable Integer status, Long[] ids) {
+        return dishService.changeStatus(status, ids);
     }
 
     //6.查询菜品的分类回显
     @GetMapping("/list")
-    public Result<List<Dish>> showDishes(Long categoryId,String name){
+    public Result<List<Dish>> showDishes(Long categoryId, String name) {
         LambdaQueryWrapper<Dish> lambdaQueryWrapper = new LambdaQueryWrapper<Dish>();
-        lambdaQueryWrapper.eq(!StringUtils.isEmpty(categoryId),Dish::getCategoryId,categoryId);
-        lambdaQueryWrapper.like(!StringUtils.isEmpty(name),Dish::getName,name);
-        lambdaQueryWrapper.eq(Dish::getStatus,1);
+        lambdaQueryWrapper.eq(!StringUtils.isEmpty(categoryId), Dish::getCategoryId, categoryId);
+        lambdaQueryWrapper.like(!StringUtils.isEmpty(name), Dish::getName, name);
+        lambdaQueryWrapper.eq(Dish::getStatus, 1);
         List<Dish> dishes = dishService.list(lambdaQueryWrapper);
         return Result.success(dishes);
     }
+
     //查询菜品的同时,显示菜品的口味
     @GetMapping("/list1")
-    public Result<List<DishDto>> showDishesWithFlavors(Long categoryId,Integer status){
+    public Result<List<DishDto>> showDishesWithFlavors(Long categoryId, Integer status) {
+        //先从Redis中获取缓存数据
+        List<DishDto> dishDtoList = null;
+        //动态构建key
+        String key = "key_" + categoryId + "_" + status;
+        dishDtoList = (List<DishDto>) redisTemplate.opsForValue().get(key);
+        if (dishDtoList != null) {
+            return Result.success(dishDtoList);
+        }
+        //如果不存在,则查询MySQL数据库,并将查询到的数据缓存到Redis中
         LambdaQueryWrapper<Dish> lambdaQueryWrapper = new LambdaQueryWrapper<Dish>();
-        lambdaQueryWrapper.eq(!StringUtils.isEmpty(categoryId),Dish::getCategoryId,categoryId);
-        lambdaQueryWrapper.eq(Dish::getStatus,status);
+        lambdaQueryWrapper.eq(!StringUtils.isEmpty(categoryId), Dish::getCategoryId, categoryId);
+        lambdaQueryWrapper.eq(Dish::getStatus, status);
         List<Dish> dishes = dishService.list(lambdaQueryWrapper);
-        List<DishDto> dishDtos = dishes.stream().map((item)->{
+        dishDtoList = dishes.stream().map((item) -> {
             DishDto dishDto = dishService.getByIdWithFlavor(item.getId());
             return dishDto;
         }).collect(Collectors.toList());
-        return Result.success(dishDtos);
+        redisTemplate.opsForValue().set(key,dishDtoList,60, TimeUnit.MINUTES);
+        return Result.success(dishDtoList);
     }
 }

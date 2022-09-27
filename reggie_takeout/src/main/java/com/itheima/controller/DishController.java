@@ -19,6 +19,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -70,6 +71,9 @@ public class DishController {
     @PostMapping
     public Result<String> addDish(@RequestBody DishDto dishDto) {
         dishService.saveWithFlavors(dishDto);
+        //清理某个分类下的redis
+        String key = "dish_"+dishDto.getCategoryId()+"_1";
+        redisTemplate.delete(key);
         return Result.success("新增菜品成功");
     }
 
@@ -85,18 +89,25 @@ public class DishController {
     @PutMapping()
     public Result<String> update(@RequestBody DishDto dishDto) {
         dishService.updateWithFlavors(dishDto);
+        //清理某个分类下的Redis缓存
+        String key = "dish_"+dishDto.getCategoryId()+"_1";
+        redisTemplate.delete(key);
         return Result.success("菜品修改成功");
     }
 
     //4.删除,批量删除菜品
     @DeleteMapping()
     public Result<String> delete(Long[] ids) {
+        Set keys = redisTemplate.keys("dish_*");
+        redisTemplate.delete(keys);
         return dishService.remove(ids);
     }
 
     //5.修改,批量修改停售起售状态
     @PostMapping("/status/{status}")
     public Result<Object> status(@PathVariable Integer status, Long[] ids) {
+        Set keys = redisTemplate.keys("dish_*");
+        redisTemplate.delete(keys);
         return dishService.changeStatus(status, ids);
     }
 

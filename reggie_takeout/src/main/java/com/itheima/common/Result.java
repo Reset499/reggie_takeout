@@ -2,11 +2,12 @@ package com.itheima.common;
 
 import lombok.Data;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
 @Data
-public class Result<Type> {
+public class Result<Type> implements Serializable{
     private Integer code;//1表示成功,0表示失败
     private String message;//错误信息
     private Type data;//数据 实体类

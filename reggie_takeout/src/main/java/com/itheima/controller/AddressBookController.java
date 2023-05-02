@@ -23,7 +23,7 @@ public class AddressBookController {
     private AddressBookService addressBookService;
 
     //1.展示地址簿
-    @GetMapping("/list")
+    @GetMapping("/list")//理应是应该将这个方法写在service中 然后在通过service对象来调用它 这里逻辑简单直接在这里就实现了
     public Result<List<AddressBook>> showAddressBook(HttpSession session) {
         String UserId = session.getAttribute("user").toString();
         LambdaQueryWrapper<AddressBook> lambdaQueryWrapper = new LambdaQueryWrapper<AddressBook>();
